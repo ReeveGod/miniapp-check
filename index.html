@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Проверка сервиса</title>
+</head>
+<body>
+  <h2 id="status">Проверяем доступность сервиса…</h2>
+
+  <script>
+    const ZROK_URL = "https://glint.share.zrok.io";
+
+    const timeout = setTimeout(() => {
+      document.getElementById("status").innerText =
+        "Сайт временно выключен. Попробуйте позже.";
+    }, 3000);
+
+    fetch(ZROK_URL, { mode: "no-cors" })
+      .then(() => {
+        clearTimeout(timeout);
+        window.location.href = ZROK_URL;
+      })
+      .catch(() => {
+        clearTimeout(timeout);
+        document.getElementById("status").innerText =
+          "Сайт временно выключен. Попробуйте позже.";
+      });
+  </script>
+</body>
+</html>
