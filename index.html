@@ -43,11 +43,15 @@
   <script>
     const ZROK_URL = "https://glint.share.zrok.io";
     const REDIRECT_DELAY_MS = 5000;
+    const MIN_CHECKING_TIME_MS = 2000;
 
     const checkingState = document.getElementById("checking-state");
     const successState = document.getElementById("success-state");
     const errorState = document.getElementById("error-state");
     const openBtn = document.getElementById("open-btn");
+
+    const startTime = Date.now();
+    let responseReceived = false;
 
     const showState = (state) => {
       checkingState.setAttribute('hidden', '');
@@ -57,28 +61,49 @@
     };
 
     const showSuccess = () => {
-      showState(successState);
-      openBtn.focus({ preventScroll: true });
+      const elapsed = Date.now() - startTime;
+      const remainingTime = Math.max(0, MIN_CHECKING_TIME_MS - elapsed);
 
       setTimeout(() => {
-        window.location.href = ZROK_URL;
-      }, REDIRECT_DELAY_MS);
+        showState(successState);
+        openBtn.focus({ preventScroll: true });
+
+        setTimeout(() => {
+          window.location.href = ZROK_URL;
+        }, REDIRECT_DELAY_MS);
+      }, remainingTime);
     };
 
     const showError = () => {
-      showState(errorState);
+      if (responseReceived) return;
+      
+      const elapsed = Date.now() - startTime;
+      const remainingTime = Math.max(0, MIN_CHECKING_TIME_MS - elapsed);
+
+      setTimeout(() => {
+        showState(errorState);
+      }, remainingTime);
     };
 
-    const failover = setTimeout(showError, 5000); // чуть больше, на всякий случай
+    const failover = setTimeout(() => {
+      responseReceived = true;
+      showError();
+    }, 5000);
 
     fetch(ZROK_URL + '/health', { mode: 'no-cors' }) 
       .then(() => {
-        clearTimeout(failover);
-        showSuccess();
+        if (!responseReceived) {
+          responseReceived = true;
+          clearTimeout(failover);
+          showSuccess();
+        }
       })
       .catch(() => {
-        clearTimeout(failover);
-        showError();
+        if (!responseReceived) {
+          responseReceived = true;
+          clearTimeout(failover);
+          showError();
+        }
       });
 
     openBtn.addEventListener("click", () => {
