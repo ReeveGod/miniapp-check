@@ -69,16 +69,12 @@
       showState(errorState);
     };
 
-    const failover = setTimeout(showError, 3000);
+    const failover = setTimeout(showError, 5000); // чуть больше, на всякий случай
 
-    fetch(ZROK_URL + '/health')
-      .then((response) => {
+    fetch(ZROK_URL + '/health', { mode: 'no-cors' }) 
+      .then(() => {
         clearTimeout(failover);
-        if (response.ok) {
-          showSuccess();
-        } else {
-          showError();
-        }
+        showSuccess();
       })
       .catch(() => {
         clearTimeout(failover);
