@@ -71,10 +71,14 @@
 
     const failover = setTimeout(showError, 3000);
 
-    fetch(ZROK_URL, { mode: "no-cors" })
-      .then(() => {
+    fetch(ZROK_URL + '/health')
+      .then((response) => {
         clearTimeout(failover);
-        showSuccess();
+        if (response.ok) {
+          showSuccess();
+        } else {
+          showError();
+        }
       })
       .catch(() => {
         clearTimeout(failover);
