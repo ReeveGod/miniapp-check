@@ -11,27 +11,55 @@
     <div class="card">
       <h1 class="title">Проверка сервиса</h1>
       <p id="status" class="status">Проверяем доступность сервиса…</p>
+
+      <div class="actions">
+        <button id="open-btn" class="btn" type="button" hidden>Открыть Glint</button>
+      </div>
+
+      <p id="note" class="note">
+        Если на сайте будет кнопка "Visit Share", просто нажмите на неё
+      </p>
     </div>
   </div>
 
   <script>
     const ZROK_URL = "https://glint.share.zrok.io";
+    const REDIRECT_DELAY_MS = 5000;
+    const OFFLINE_TEXT = "Сайт временно выключен. Попробуйте позже.";
 
-    const timeout = setTimeout(() => {
-      document.getElementById("status").innerText =
-        "Сайт временно выключен. Попробуйте позже.";
-    }, 3000);
+    const statusEl = document.getElementById("status");
+    const openBtn = document.getElementById("open-btn");
+
+    const offline = () => {
+      statusEl.innerText = OFFLINE_TEXT;
+      openBtn.hidden = true;
+    };
+
+    const ready = () => {
+      statusEl.innerText = "Сервис доступен. Перенаправим через 5 секунд…";
+      openBtn.hidden = false;
+      openBtn.focus({ preventScroll: true });
+
+      setTimeout(() => {
+        window.location.href = ZROK_URL;
+      }, REDIRECT_DELAY_MS);
+    };
+
+    const failover = setTimeout(offline, 3000);
 
     fetch(ZROK_URL, { mode: "no-cors" })
       .then(() => {
-        clearTimeout(timeout);
-        window.location.href = ZROK_URL;
+        clearTimeout(failover);
+        ready();
       })
       .catch(() => {
-        clearTimeout(timeout);
-        document.getElementById("status").innerText =
-          "Сайт временно выключен. Попробуйте позже.";
+        clearTimeout(failover);
+        offline();
       });
+
+    openBtn.addEventListener("click", () => {
+      window.location.href = ZROK_URL;
+    });
   </script>
 </body>
 </html>
