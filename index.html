@@ -22,7 +22,7 @@
 
       <div id="success-state" class="state" hidden>
         <h1 class="title">Всё в порядке</h1>
-        <p class="subtitle">Через 5 секунд<br>перенаправим вас.</p>
+        <p class="subtitle">Через пару секунд<br>перенаправим вас.</p>
         <button id="open-btn" class="btn" type="button">
           <img src="star.svg" alt="" class="btn-icon">
           Перейти в Glint
@@ -42,7 +42,7 @@
 
   <script>
     const ZROK_URL = "https://glint.share.zrok.io";
-    const REDIRECT_DELAY_MS = 5000;
+    const REDIRECT_DELAY_MS = 3000;
     const MIN_CHECKING_TIME_MS = 2000;
 
     const checkingState = document.getElementById("checking-state");
