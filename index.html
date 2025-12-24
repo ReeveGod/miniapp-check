@@ -8,36 +8,56 @@
 </head>
 <body>
   <div class="page">
-    <div class="card">
-      <h1 class="title">Проверка сервиса</h1>
-      <p id="status" class="status">Проверяем доступность сервиса…</p>
-
-      <div class="actions">
-        <button id="open-btn" class="btn" type="button" hidden>Открыть Glint</button>
+    <div class="content">
+      <div class="logo">
+        <img src="logo.svg" alt="Logo" onerror="this.style.display='none'">
       </div>
 
-      <p id="note" class="note">
-        Если на сайте будет кнопка "Visit Share", просто нажмите на неё
-      </p>
+      <div id="checking-state" class="state">
+        <h1 class="title">Секундочку</h1>
+        <p class="subtitle">Проверяем доступность<br>мини-приложения...</p>
+        <div class="divider"></div>
+        <p class="note">Бот работает с 12:00 до 20:00 по МСК</p>
+      </div>
+
+      <div id="success-state" class="state" hidden>
+        <h1 class="title">Всё в порядке</h1>
+        <p class="subtitle">Через 5 секунд<br>перенаправим вас.</p>
+        <button id="open-btn" class="btn" type="button">
+          <img src="star.svg" alt="" class="btn-icon">
+          Перейти в Glint
+        </button>
+        <div class="divider"></div>
+        <p class="note">Если будет страница с кнопкой "Visit Share" – просто нажмите на эту кнопку.</p>
+      </div>
+
+      <div id="error-state" class="state" hidden>
+        <h1 class="title">Ой!</h1>
+        <p class="subtitle">Мини-приложение<br>сейчас недоступно.</p>
+        <div class="divider"></div>
+        <p class="note">Бот работает с 12:00 до 20:00 по МСК</p>
+      </div>
     </div>
   </div>
 
   <script>
     const ZROK_URL = "https://glint.share.zrok.io";
     const REDIRECT_DELAY_MS = 5000;
-    const OFFLINE_TEXT = "Сайт временно выключен. Попробуйте позже.";
 
-    const statusEl = document.getElementById("status");
+    const checkingState = document.getElementById("checking-state");
+    const successState = document.getElementById("success-state");
+    const errorState = document.getElementById("error-state");
     const openBtn = document.getElementById("open-btn");
 
-    const offline = () => {
-      statusEl.innerText = OFFLINE_TEXT;
-      openBtn.hidden = true;
+    const showState = (state) => {
+      checkingState.setAttribute('hidden', '');
+      successState.setAttribute('hidden', '');
+      errorState.setAttribute('hidden', '');
+      state.removeAttribute('hidden');
     };
 
-    const ready = () => {
-      statusEl.innerText = "Сервис доступен. Перенаправим через 5 секунд…";
-      openBtn.hidden = false;
+    const showSuccess = () => {
+      showState(successState);
       openBtn.focus({ preventScroll: true });
 
       setTimeout(() => {
@@ -45,16 +65,20 @@
       }, REDIRECT_DELAY_MS);
     };
 
-    const failover = setTimeout(offline, 3000);
+    const showError = () => {
+      showState(errorState);
+    };
+
+    const failover = setTimeout(showError, 3000);
 
     fetch(ZROK_URL, { mode: "no-cors" })
       .then(() => {
         clearTimeout(failover);
-        ready();
+        showSuccess();
       })
       .catch(() => {
         clearTimeout(failover);
-        offline();
+        showError();
       });
 
     openBtn.addEventListener("click", () => {
