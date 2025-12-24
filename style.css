@@ -71,8 +71,12 @@ body {
 .title {
   font-family: 'ASB';
   font-size: 32px;
+  font-weight: normal;
   color: #fff;
   line-height: 1.2;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 .subtitle {
