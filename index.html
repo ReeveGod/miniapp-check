@@ -108,25 +108,39 @@
     };
 
     const failover = setTimeout(() => {
-      responseReceived = true;
-      showError();
+      if (!responseReceived) {
+        responseReceived = true;
+        showError();
+      }
     }, 5000);
 
-    // Проверяем доступность сервера без CORS
-    // Убрали mode: 'no-cors', чтобы правильно определять недоступность сервера
-    // Если сервер недоступен (не отвечает), запрос упадет в catch
-    fetch(ZROK_URL + '/health', {
+    // Создаем Promise с таймаутом для fetch запроса
+    const fetchWithTimeout = (url, options, timeout = 4000) => {
+      return Promise.race([
+        fetch(url, options),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout')), timeout)
+        )
+      ]);
+    };
+
+    fetchWithTimeout(ZROK_URL + '/health', { 
+      mode: 'no-cors',
       method: 'GET',
       cache: 'no-cache'
-    })
+    }, 4000)
       .then(() => {
+        // С no-cors мы не можем прочитать статус, но если запрос завершился,
+        // это означает что сервер ответил (даже если это ошибка)
+        // Для более точной проверки используем таймаут
         if (!responseReceived) {
           responseReceived = true;
           clearTimeout(failover);
           showSuccess();
         }
       })
-      .catch(() => {
+      .catch((error) => {
+        // Ошибка сети или таймаут - сервер недоступен
         if (!responseReceived) {
           responseReceived = true;
           clearTimeout(failover);
