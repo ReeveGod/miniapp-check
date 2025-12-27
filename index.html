@@ -114,28 +114,51 @@
       }
     }, 5000);
 
-    // Создаем Promise с таймаутом для fetch запроса
-    const fetchWithTimeout = (url, options, timeout = 4000) => {
-      return Promise.race([
-        fetch(url, options),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout')), timeout)
-        )
-      ]);
+    // Используем проверку через загрузку изображения - это работает без CORS
+    // Пытаемся загрузить несуществующее изображение
+    // Если сервер доступен, он ответит (даже если 404) - onerror сработает быстро
+    // Если сервер недоступен, будет таймаут
+    const checkServerAvailability = () => {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        let resolved = false;
+        
+        const timeout = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            img.onload = null;
+            img.onerror = null;
+            reject(new Error('Timeout'));
+          }
+        }, 4000);
+
+        img.onload = () => {
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeout);
+            resolve();
+          }
+        };
+
+        img.onerror = () => {
+          // Если onerror сработал, это значит что сервер ответил (даже если 404)
+          // Это лучше чем таймаут, который означает что сервер не отвечает
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeout);
+            resolve(); // Считаем успехом - сервер ответил
+          }
+        };
+
+        // Пытаемся загрузить несуществующее изображение с уникальным параметром для обхода кеша
+        // Если сервер доступен, он вернет 404, и onerror сработает
+        // Если сервер недоступен, будет таймаут
+        img.src = ZROK_URL + '/health-check-' + Date.now() + '.png?t=' + Date.now();
+      });
     };
 
-    // Примечание: ошибки CORS в консоли при использовании no-cors - это нормально
-    // Браузер не может прочитать ответ, но запрос выполняется успешно
-    fetchWithTimeout(ZROK_URL + '/health', { 
-      mode: 'no-cors',
-      method: 'GET',
-      cache: 'no-cache',
-      credentials: 'omit'
-    }, 4000)
+    checkServerAvailability()
       .then(() => {
-        // С no-cors мы не можем прочитать статус ответа, но если запрос завершился
-        // без сетевой ошибки, это означает что сервер ответил (даже если статус не 200)
-        // В случае реальной недоступности сервера будет ошибка сети или таймаут
         if (!responseReceived) {
           responseReceived = true;
           clearTimeout(failover);
@@ -143,7 +166,6 @@
         }
       })
       .catch((error) => {
-        // Ошибка сети или таймаут - сервер недоступен или не отвечает
         if (!responseReceived) {
           responseReceived = true;
           clearTimeout(failover);
