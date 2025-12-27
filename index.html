@@ -40,6 +40,7 @@
     </div>
   </div>
 
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script>
     const ZROK_URL = "https://glint.share.zrok.io";
     const REDIRECT_DELAY_MS = 3000;
@@ -52,6 +53,27 @@
 
     const startTime = Date.now();
     let responseReceived = false;
+    
+    // Получаем initData от Telegram WebApp (если доступен)
+    let telegramInitData = null;
+    try {
+      if (window.Telegram && window.Telegram.WebApp) {
+        const tg = window.Telegram.WebApp;
+        telegramInitData = tg.initData || null;
+      }
+    } catch (e) {
+      console.log("Telegram WebApp не доступен:", e);
+    }
+
+    // Функция для формирования URL с initData
+    const buildRedirectUrl = () => {
+      let url = ZROK_URL;
+      if (telegramInitData) {
+        // Передаем initData через hash, чтобы не было проблем с URL encoding
+        url += '#tgWebAppData=' + encodeURIComponent(telegramInitData);
+      }
+      return url;
+    };
 
     const showState = (state) => {
       checkingState.setAttribute('hidden', '');
@@ -69,7 +91,7 @@
         openBtn.focus({ preventScroll: true });
 
         setTimeout(() => {
-          window.location.href = ZROK_URL;
+          window.location.href = buildRedirectUrl();
         }, REDIRECT_DELAY_MS);
       }, remainingTime);
     };
@@ -107,7 +129,7 @@
       });
 
     openBtn.addEventListener("click", () => {
-      window.location.href = ZROK_URL;
+      window.location.href = buildRedirectUrl();
     });
   </script>
 </body>
