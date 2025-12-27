@@ -42,137 +42,120 @@
 
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script>
+    // Укажите базовый URL (без слэша в конце)
     const ZROK_URL = "https://glint.share.zrok.io";
-    const REDIRECT_DELAY_MS = 3000;
-    const MIN_CHECKING_TIME_MS = 2000;
+    
+    // Настройки времени
+    const REDIRECT_DELAY_MS = 2500;
+    const CHECK_TIMEOUT_MS = 5000; // Сколько ждем ответа от скрипта
 
     const checkingState = document.getElementById("checking-state");
     const successState = document.getElementById("success-state");
     const errorState = document.getElementById("error-state");
     const openBtn = document.getElementById("open-btn");
 
-    const startTime = Date.now();
-    let responseReceived = false;
-    
-    // Получаем initData от Telegram WebApp (если доступен)
+    // Инициализация Telegram WebApp
     let telegramInitData = null;
     try {
       if (window.Telegram && window.Telegram.WebApp) {
-        const tg = window.Telegram.WebApp;
-        telegramInitData = tg.initData || null;
+        telegramInitData = window.Telegram.WebApp.initData || null;
+        window.Telegram.WebApp.expand(); // На всякий случай разворачиваем
       }
     } catch (e) {
-      console.log("Telegram WebApp не доступен:", e);
+      console.error("Telegram WebApp API error:", e);
     }
 
-    // Функция для формирования URL с initData
+    // Формирование ссылки для редиректа
     const buildRedirectUrl = () => {
       let url = ZROK_URL;
       if (telegramInitData) {
-        // Передаем initData через hash, чтобы не было проблем с URL encoding
         url += '#tgWebAppData=' + encodeURIComponent(telegramInitData);
       }
       return url;
     };
 
+    // Переключение экранов
     const showState = (state) => {
-      checkingState.setAttribute('hidden', '');
-      successState.setAttribute('hidden', '');
-      errorState.setAttribute('hidden', '');
+      [checkingState, successState, errorState].forEach(el => el.setAttribute('hidden', ''));
       state.removeAttribute('hidden');
     };
 
-    const showSuccess = () => {
-      const elapsed = Date.now() - startTime;
-      const remainingTime = Math.max(0, MIN_CHECKING_TIME_MS - elapsed);
-
-      setTimeout(() => {
-        showState(successState);
-        openBtn.focus({ preventScroll: true });
-
-        setTimeout(() => {
-          window.location.href = buildRedirectUrl();
-        }, REDIRECT_DELAY_MS);
-      }, remainingTime);
-    };
-
-    const showError = () => {
-      if (responseReceived) return;
+    // Логика успеха
+    const handleSuccess = () => {
+      showState(successState);
       
-      const elapsed = Date.now() - startTime;
-      const remainingTime = Math.max(0, MIN_CHECKING_TIME_MS - elapsed);
-
+      // Предзагрузка URL для ускорения
+      const targetUrl = buildRedirectUrl();
+      
       setTimeout(() => {
-        showState(errorState);
-      }, remainingTime);
+        window.location.href = targetUrl;
+      }, REDIRECT_DELAY_MS);
     };
 
-    const failover = setTimeout(() => {
-      if (!responseReceived) {
-        responseReceived = true;
-        showError();
-      }
-    }, 5000);
+    // Логика ошибки
+    const handleError = () => {
+      showState(errorState);
+    };
 
-    // Используем проверку через загрузку изображения - это работает без CORS
-    // Пытаемся загрузить несуществующее изображение
-    // Если сервер доступен, он ответит (даже если 404) - onerror сработает быстро
-    // Если сервер недоступен, будет таймаут
+    // --- ГЛАВНАЯ ФУНКЦИЯ ПРОВЕРКИ (JSONP) ---
     const checkServerAvailability = () => {
       return new Promise((resolve, reject) => {
-        const img = new Image();
-        let resolved = false;
-        
-        const timeout = setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            img.onload = null;
-            img.onerror = null;
-            reject(new Error('Timeout'));
-          }
-        }, 4000);
+        // Уникальное имя функции, чтобы избежать кеширования и коллизий
+        const callbackName = 'glint_health_' + Date.now();
+        const script = document.createElement('script');
+        let isResolved = false;
 
-        img.onload = () => {
-          if (!resolved) {
-            resolved = true;
-            clearTimeout(timeout);
+        // Создаем глобальную функцию, которую вызовет сервер
+        window[callbackName] = (data) => {
+          if (isResolved) return;
+          isResolved = true;
+          cleanup();
+          
+          if (data && data.status === 'ok') {
             resolve();
+          } else {
+            reject();
           }
         };
 
-        img.onerror = () => {
-          // Если onerror сработал, это значит что сервер ответил (даже если 404)
-          // Это лучше чем таймаут, который означает что сервер не отвечает
-          if (!resolved) {
-            resolved = true;
-            clearTimeout(timeout);
-            resolve(); // Считаем успехом - сервер ответил
-          }
+        // Очистка DOM и глобальной области
+        const cleanup = () => {
+          if (script.parentNode) script.parentNode.removeChild(script);
+          delete window[callbackName];
         };
 
-        // Пытаемся загрузить несуществующее изображение с уникальным параметром для обхода кеша
-        // Если сервер доступен, он вернет 404, и onerror сработает
-        // Если сервер недоступен, будет таймаут
-        img.src = ZROK_URL + '/health-check-' + Date.now() + '.png?t=' + Date.now();
+        // Если скрипт не загрузился или сервер вернул ошибку
+        script.onerror = () => {
+          if (isResolved) return;
+          isResolved = true;
+          cleanup();
+          reject();
+        };
+
+        // Таймаут (если Zrok висит или вернул HTML, который не исполнился как JS)
+        setTimeout(() => {
+          if (isResolved) return;
+          isResolved = true;
+          cleanup();
+          reject(); // Считаем ошибкой по таймауту
+        }, CHECK_TIMEOUT_MS);
+
+        // Добавляем параметр времени для обхода кеша
+        script.src = `${ZROK_URL}/health_jsonp?callback=${callbackName}&_=${Date.now()}`;
+        document.body.appendChild(script);
       });
     };
 
+    // Запуск проверки при загрузке
     checkServerAvailability()
       .then(() => {
-        if (!responseReceived) {
-          responseReceived = true;
-          clearTimeout(failover);
-          showSuccess();
-        }
+        handleSuccess();
       })
-      .catch((error) => {
-        if (!responseReceived) {
-          responseReceived = true;
-          clearTimeout(failover);
-          showError();
-        }
+      .catch(() => {
+        handleError();
       });
 
+    // Обработчик кнопки ручного перехода
     openBtn.addEventListener("click", () => {
       window.location.href = buildRedirectUrl();
     });
