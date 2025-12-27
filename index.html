@@ -42,30 +42,28 @@
 
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script>
-    // Укажите базовый URL (без слэша в конце)
+    // --- НАСТРОЙКИ ---
     const ZROK_URL = "https://glint.share.zrok.io";
-    
-    // Настройки времени
-    const REDIRECT_DELAY_MS = 2500;
-    const CHECK_TIMEOUT_MS = 5000; // Сколько ждем ответа от скрипта
+    const REDIRECT_DELAY_MS = 2000;
+    const CHECK_TIMEOUT_MS = 5000;
 
+    // --- ЭЛЕМЕНТЫ DOM ---
     const checkingState = document.getElementById("checking-state");
     const successState = document.getElementById("success-state");
     const errorState = document.getElementById("error-state");
     const openBtn = document.getElementById("open-btn");
 
-    // Инициализация Telegram WebApp
+    // --- TELEGRAM INIT DATA ---
     let telegramInitData = null;
     try {
       if (window.Telegram && window.Telegram.WebApp) {
         telegramInitData = window.Telegram.WebApp.initData || null;
-        window.Telegram.WebApp.expand(); // На всякий случай разворачиваем
+        window.Telegram.WebApp.expand();
       }
     } catch (e) {
-      console.error("Telegram WebApp API error:", e);
+      console.error("TG WebApp error:", e);
     }
 
-    // Формирование ссылки для редиректа
     const buildRedirectUrl = () => {
       let url = ZROK_URL;
       if (telegramInitData) {
@@ -74,88 +72,59 @@
       return url;
     };
 
-    // Переключение экранов
     const showState = (state) => {
       [checkingState, successState, errorState].forEach(el => el.setAttribute('hidden', ''));
       state.removeAttribute('hidden');
     };
 
-    // Логика успеха
-    const handleSuccess = () => {
-      showState(successState);
-      
-      // Предзагрузка URL для ускорения
-      const targetUrl = buildRedirectUrl();
-      
-      setTimeout(() => {
-        window.location.href = targetUrl;
-      }, REDIRECT_DELAY_MS);
-    };
-
-    // Логика ошибки
-    const handleError = () => {
-      showState(errorState);
-    };
-
-    // --- ГЛАВНАЯ ФУНКЦИЯ ПРОВЕРКИ (JSONP) ---
+    // --- ЛОГИКА ПРОВЕРКИ ---
+    
     const checkServerAvailability = () => {
       return new Promise((resolve, reject) => {
-        // Уникальное имя функции, чтобы избежать кеширования и коллизий
-        const callbackName = 'glint_health_' + Date.now();
-        const script = document.createElement('script');
+        const img = new Image();
         let isResolved = false;
 
-        // Создаем глобальную функцию, которую вызовет сервер
-        window[callbackName] = (data) => {
+        const finish = (success) => {
           if (isResolved) return;
           isResolved = true;
-          cleanup();
-          
-          if (data && data.status === 'ok') {
-            resolve();
-          } else {
-            reject();
-          }
+          // Останавливаем загрузку, чтобы не висело в сети
+          img.src = ""; 
+          if (success) resolve();
+          else reject();
         };
 
-        // Очистка DOM и глобальной области
-        const cleanup = () => {
-          if (script.parentNode) script.parentNode.removeChild(script);
-          delete window[callbackName];
-        };
+        // 1. УСПЕХ: Картинка загрузилась валидно.
+        // Это значит сервер отдал именно PNG, а не HTML-заглушку.
+        img.onload = () => finish(true);
 
-        // Если скрипт не загрузился или сервер вернул ошибку
-        script.onerror = () => {
-          if (isResolved) return;
-          isResolved = true;
-          cleanup();
-          reject();
-        };
+        // 2. ОШИБКА: 
+        // - Либо 404/500
+        // - Либо сервер отдал HTML (заглушку Zrok), и браузер не смог распарсить это как картинку.
+        img.onerror = () => finish(false);
 
-        // Таймаут (если Zrok висит или вернул HTML, который не исполнился как JS)
-        setTimeout(() => {
-          if (isResolved) return;
-          isResolved = true;
-          cleanup();
-          reject(); // Считаем ошибкой по таймауту
-        }, CHECK_TIMEOUT_MS);
+        // 3. ТАЙМАУТ: Сервер просто не отвечает.
+        setTimeout(() => finish(false), CHECK_TIMEOUT_MS);
 
-        // Добавляем параметр времени для обхода кеша
-        script.src = `${ZROK_URL}/health_jsonp?callback=${callbackName}&_=${Date.now()}`;
-        document.body.appendChild(script);
+        // Добавляем timestamp, чтобы браузер не брал картинку из кеша
+        img.src = `${ZROK_URL}/health_pixel.png?t=${Date.now()}`;
       });
     };
 
-    // Запуск проверки при загрузке
+    // Запуск
     checkServerAvailability()
       .then(() => {
-        handleSuccess();
+        // Сервер жив
+        showState(successState);
+        const targetUrl = buildRedirectUrl();
+        setTimeout(() => {
+          window.location.href = targetUrl;
+        }, REDIRECT_DELAY_MS);
       })
       .catch(() => {
-        handleError();
+        // Сервер мертв или это заглушка
+        showState(errorState);
       });
 
-    // Обработчик кнопки ручного перехода
     openBtn.addEventListener("click", () => {
       window.location.href = buildRedirectUrl();
     });
