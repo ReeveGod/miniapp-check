@@ -79,34 +79,42 @@
 
     // --- ЛОГИКА ПРОВЕРКИ ---
     
+    // index.html - Обновленная функция checkServerAvailability
     const checkServerAvailability = () => {
       return new Promise((resolve, reject) => {
-        const img = new Image();
-        let isResolved = false;
+        const url = `${ZROK_URL}/health_pixel.png?t=${Date.now()}`;
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort(); // Прерываем запрос по таймауту
+          reject("Timeout");
+        }, CHECK_TIMEOUT_MS);
 
-        const finish = (success) => {
-          if (isResolved) return;
-          isResolved = true;
-          // Останавливаем загрузку, чтобы не висело в сети
-          img.src = ""; 
-          if (success) resolve();
-          else reject();
-        };
-
-        // 1. УСПЕХ: Картинка загрузилась валидно.
-        // Это значит сервер отдал именно PNG, а не HTML-заглушку.
-        img.onload = () => finish(true);
-
-        // 2. ОШИБКА: 
-        // - Либо 404/500
-        // - Либо сервер отдал HTML (заглушку Zrok), и браузер не смог распарсить это как картинку.
-        img.onerror = () => finish(false);
-
-        // 3. ТАЙМАУТ: Сервер просто не отвечает.
-        setTimeout(() => finish(false), CHECK_TIMEOUT_MS);
-
-        // Добавляем timestamp, чтобы браузер не брал картинку из кеша
-        img.src = `${ZROK_URL}/health_pixel.png?t=${Date.now()}`;
+        fetch(url, { signal: controller.signal })
+          .then(response => {
+            clearTimeout(timeoutId);
+              // 1. Проверяем HTTP статус: только 2xx считаются успехом
+              if (response.ok) { 
+                // 2. Проверяем тип контента. 
+                // Если Zrok вернул заглушку, Content-Type будет 'text/html'.
+                const contentType = response.headers.get("Content-Type");
+                if (contentType && contentType.includes("image/png")) {
+                    resolve(); // Успех
+                } else {
+                    // Сервер доступен, но вернул неправильный тип (например, заглушку)
+                    reject("Invalid Content-Type");
+                }
+              } else {
+                // Статус 4xx или 5xx
+                reject(`HTTP Error: ${response.status}`);
+              }
+          })
+          .catch(error => {
+            clearTimeout(timeoutId);
+            if (error.name !== 'AbortError') {
+              reject(error); // Ошибка сети, DNS, или прервано
+            }
+          });
       });
     };
 
