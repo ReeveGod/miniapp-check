@@ -112,12 +112,24 @@
       showError();
     }, 5000);
 
-    fetch(ZROK_URL + '/health', { mode: 'no-cors' }) 
-      .then(() => {
+    fetch(ZROK_URL + '/health')
+      .then(response => {
         if (!responseReceived) {
-          responseReceived = true;
-          clearTimeout(failover);
-          showSuccess();
+          // Проверяем статус ответа
+          if (response.ok) {
+            // Проверяем содержимое ответа
+            return response.text().then(text => {
+              if (text.trim() === 'ok') {
+                responseReceived = true;
+                clearTimeout(failover);
+                showSuccess();
+              } else {
+                throw new Error('Invalid health response');
+              }
+            });
+          } else {
+            throw new Error(`HTTP ${response.status}`);
+          }
         }
       })
       .catch(() => {
