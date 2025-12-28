@@ -2,140 +2,95 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Проверка сервиса</title>
+  <title>Glint</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      margin: 0;
+      background: #0e0e11;
+      color: #fff;
+      font-family: system-ui, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    .box {
+      text-align: center;
+      max-width: 320px;
+    }
+    .hidden { display: none; }
+    button {
+      margin-top: 20px;
+      padding: 12px 18px;
+      border-radius: 10px;
+      border: none;
+      background: #6c5cff;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
-  <div class="page">
-    <div class="content">
-      <div class="logo">
-        <img src="logo.svg" alt="Logo" onerror="this.style.display='none'">
-      </div>
 
-      <div id="checking-state" class="state">
-        <h1 class="title">Секундочку</h1>
-        <p class="subtitle">Проверяем доступность<br>мини-приложения...</p>
-        <div class="divider"></div>
-        <p class="note">Бот работает с 12:00 до 20:00 по МСК</p>
-      </div>
-
-      <div id="success-state" class="state" hidden>
-        <h1 class="title">Всё в порядке</h1>
-        <p class="subtitle">Через пару секунд<br>перенаправим вас.</p>
-        <button id="open-btn" class="btn" type="button">
-          <img src="star.svg" alt="" class="btn-icon">
-          Перейти в Glint
-        </button>
-        <div class="divider"></div>
-        <p class="note">Если будет страница с кнопкой "Visit Share" – просто нажмите на эту кнопку.</p>
-      </div>
-
-      <div id="error-state" class="state" hidden>
-        <h1 class="title">Ой!</h1>
-        <p class="subtitle">Мини-приложение<br>сейчас недоступно.</p>
-        <div class="divider"></div>
-        <p class="note">Бот работает с 12:00 до 20:00 по МСК</p>
-      </div>
-    </div>
+<div class="box">
+  <div id="checking">
+    <h2>Проверяем сервис…</h2>
+    <p>Подождите пару секунд</p>
   </div>
 
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script>
-    // --- НАСТРОЙКИ ---
-    const ZROK_URL = "https://glint.share.zrok.io";
-    const REDIRECT_DELAY_MS = 2000;
-    const CHECK_TIMEOUT_MS = 5000;
+  <div id="ok" class="hidden">
+    <h2>Готово</h2>
+    <p>Мини-приложение доступно</p>
+    <button id="open">Открыть Glint</button>
+  </div>
 
-    // --- ЭЛЕМЕНТЫ DOM ---
-    const checkingState = document.getElementById("checking-state");
-    const successState = document.getElementById("success-state");
-    const errorState = document.getElementById("error-state");
-    const openBtn = document.getElementById("open-btn");
+  <div id="fail" class="hidden">
+    <h2>Недоступно</h2>
+    <p>Мини-приложение сейчас выключено</p>
+  </div>
+</div>
 
-    // --- TELEGRAM INIT DATA ---
-    let telegramInitData = null;
-    try {
-      if (window.Telegram && window.Telegram.WebApp) {
-        telegramInitData = window.Telegram.WebApp.initData || null;
-        window.Telegram.WebApp.expand();
-      }
-    } catch (e) {
-      console.error("TG WebApp error:", e);
-    }
+<script>
+const MINIAPP_URL = "https://glint.share.zrok.io";
+const HEALTH_URL = MINIAPP_URL + "/__miniapp_alive";
+const SECRET_CHECK_WINDOW = 15; // секунд
 
-    const buildRedirectUrl = () => {
-      let url = ZROK_URL;
-      if (telegramInitData) {
-        url += '#tgWebAppData=' + encodeURIComponent(telegramInitData);
-      }
-      return url;
-    };
+const checking = document.getElementById("checking");
+const ok = document.getElementById("ok");
+const fail = document.getElementById("fail");
+const openBtn = document.getElementById("open");
 
-    const showState = (state) => {
-      [checkingState, successState, errorState].forEach(el => el.setAttribute('hidden', ''));
-      state.removeAttribute('hidden');
-    };
+function show(el) {
+  checking.classList.add("hidden");
+  ok.classList.add("hidden");
+  fail.classList.add("hidden");
+  el.classList.remove("hidden");
+}
 
-    // --- ЛОГИКА ПРОВЕРКИ ---
-    
-    // index.html - Обновленная функция checkServerAvailability
-    const checkServerAvailability = () => {
-      return new Promise((resolve, reject) => {
-        const url = `${ZROK_URL}/health_pixel.png?t=${Date.now()}`;
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => {
-          controller.abort(); // Прерываем запрос по таймауту
-          reject("Timeout");
-        }, CHECK_TIMEOUT_MS);
+async function checkAlive() {
+  try {
+    const r = await fetch(HEALTH_URL, { cache: "no-store" });
+    if (!r.ok) throw 0;
 
-        fetch(url, { signal: controller.signal })
-          .then(response => {
-            clearTimeout(timeoutId);
-              // 1. Проверяем HTTP статус: только 2xx считаются успехом
-              if (response.ok) { 
-                // 2. Проверяем тип контента. 
-                // Если Zrok вернул заглушку, Content-Type будет 'text/html'.
-                const contentType = response.headers.get("Content-Type");
-                if (contentType && contentType.includes("image/png")) {
-                    resolve(); // Успех
-                } else {
-                    // Сервер доступен, но вернул неправильный тип (например, заглушку)
-                    reject("Invalid Content-Type");
-                }
-              } else {
-                // Статус 4xx или 5xx
-                reject(`HTTP Error: ${response.status}`);
-              }
-          })
-          .catch(error => {
-            clearTimeout(timeoutId);
-            if (error.name !== 'AbortError') {
-              reject(error); // Ошибка сети, DNS, или прервано
-            }
-          });
-      });
-    };
+    const data = await r.json();
+    if (!data.ok || !data.ts || !data.sig) throw 0;
 
-    // Запуск
-    checkServerAvailability()
-      .then(() => {
-        // Сервер жив
-        showState(successState);
-        const targetUrl = buildRedirectUrl();
-        setTimeout(() => {
-          window.location.href = targetUrl;
-        }, REDIRECT_DELAY_MS);
-      })
-      .catch(() => {
-        // Сервер мертв или это заглушка
-        showState(errorState);
-      });
+    const age = Math.abs(Date.now()/1000 - data.ts);
+    if (age > SECRET_CHECK_WINDOW) throw 0;
 
-    openBtn.addEventListener("click", () => {
-      window.location.href = buildRedirectUrl();
-    });
-  </script>
+    show(ok);
+    setTimeout(() => location.href = MINIAPP_URL, 2000);
+  } catch {
+    show(fail);
+  }
+}
+
+openBtn.onclick = () => location.href = MINIAPP_URL;
+
+checkAlive();
+</script>
+
 </body>
 </html>
